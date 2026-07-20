@@ -1,0 +1,10 @@
+# Lab example tfvars. REPLACE all placeholder values before any real use.
+# Lab defaults favor low cost: single NAT GW, single-AZ RDS, 1 Fargate task.
+
+aws_region            = "us-east-1"
+name_prefix           = "zt-lab"
+vpc_cidr              = "10.30.0.0/16"
+availability_zones    = ["us-east-1a", "us-east-1b"]
+allowed_ingress_cidrs = ["203.0.113.0/24"] # TEST-NET-3 placeholder
+certificate_arn       = "arn:aws:acm:us-east-1:123456789012:certificate/replace-with-real-cert-arn"
+container_image       = "123456789012.dkr.ecr.us-east-1.amazonaws.com/zt-app:replace-me"

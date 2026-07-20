@@ -1,0 +1,13 @@
+# Production example tfvars. REPLACE all placeholder values before any real use.
+# This file is for documentation only; do NOT use it to apply against a real account
+# without organization-specific review.
+
+aws_region            = "us-east-1"
+environment           = "prod"
+name_prefix           = "zt-prod"
+vpc_cidr              = "10.20.0.0/16"
+availability_zones    = ["us-east-1a", "us-east-1b"]
+allowed_ingress_cidrs = ["203.0.113.0/24"] # TEST-NET-3 placeholder; replace with corporate egress
+certificate_arn       = "arn:aws:acm:us-east-1:123456789012:certificate/replace-with-real-cert-arn"
+container_image       = "123456789012.dkr.ecr.us-east-1.amazonaws.com/zt-app:replace-me"
+db_instance_class     = "db.m6g.large"
