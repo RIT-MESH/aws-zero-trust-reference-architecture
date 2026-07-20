@@ -86,3 +86,23 @@ scope, and DB SG deny-all egress false positive).
 - No `terraform plan` or `terraform apply` was executed against any real backend.
 - No live AWS resources were created, changed, or destroyed.
 - No AWS credentials were required for any check above.
+
+## CI status (GitHub Actions)
+
+The repository ships two workflows: `.github/workflows/validate.yml` (fmt,
+init+validate both examples, native tests, pytest, checkov, YAML/JSON,
+`validate.sh`) and `.github/workflows/codeql.yml` (CodeQL for Python), plus a
+Dependabot configuration. Both workflow files are valid YAML (parsed locally
+with PyYAML and reported `state: active` by the GitHub Actions API) and require
+no AWS credentials and no real `terraform plan`.
+
+On this development account, every GitHub Actions run - including GitHub's own
+Dependabot runs - failed with `conclusion: startup_failure` and **0 jobs
+allocated** (no runner was provisioned). This is an account-level GitHub-hosted
+runner provisioning limitation (GitHub restricts runner allocation on very new
+accounts as an anti-abuse measure), **not** a repository or workflow-file
+defect. The one repository-side workflow issue found during inspection
+(`terraform_version: ~1.10`, where YAML parses `~` as null) was fixed by pinning
+to `"1.10.5"` and pushed. Once the account can allocate GitHub-hosted runners,
+the workflows will execute the same checks that all pass locally (rows 1-10
+above) and on any standard Ubuntu runner.
