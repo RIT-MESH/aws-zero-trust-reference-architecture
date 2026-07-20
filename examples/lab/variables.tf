@@ -47,3 +47,9 @@ variable "tags" {
     environment = "lab"
   }
 }
+
+variable "offline_validation" {
+  description = "Disable AWS credential, metadata, region, and account checks during offline validation."
+  type        = bool
+  default     = false
+}

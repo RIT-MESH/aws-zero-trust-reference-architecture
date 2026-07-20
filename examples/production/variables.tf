@@ -60,3 +60,9 @@ variable "tags" {
     cost_center = "security-platform"
   }
 }
+
+variable "offline_validation" {
+  description = "Disable AWS credential, metadata, region, and account checks during offline validation."
+  type        = bool
+  default     = false
+}

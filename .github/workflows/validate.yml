@@ -14,6 +14,18 @@ jobs:
   validate:
     name: Terraform, tests, and IaC security validation
     runs-on: ubuntu-latest
+    env:
+      # Fake placeholder AWS values for OFFLINE validation only. Not real, valid, live,
+      # temporary, sandbox, or test-account credentials. They only satisfy the AWS
+      # Terraform provider's credential parsing; no AWS API calls are made and
+      # terraform plan/apply are never run in CI. See scripts/offline-env.sh.
+      AWS_ACCESS_KEY_ID: mock_access_key
+      AWS_SECRET_ACCESS_KEY: mock_secret_key
+      AWS_SESSION_TOKEN: mock_session_token
+      AWS_DEFAULT_REGION: ap-northeast-1
+      AWS_REGION: ap-northeast-1
+      AWS_EC2_METADATA_DISABLED: "true"
+      TF_VAR_offline_validation: "true"
     steps:
       - uses: actions/checkout@v4
 

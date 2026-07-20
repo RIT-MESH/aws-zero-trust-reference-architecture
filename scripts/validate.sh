@@ -17,6 +17,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Enable offline validation: source fake placeholder AWS env vars (not real/valid/live/
+# sandbox/test-account credentials) and tell the examples to skip AWS credential,
+# metadata, and account-id checks. No AWS API calls are made; terraform plan/apply are
+# never run by this script. See scripts/offline-env.sh.
+# shellcheck source=/dev/null
+source "$ROOT/scripts/offline-env.sh"
+export TF_VAR_offline_validation=true
+
 REPORT=""
 if [[ "${1:-}" == "--report" ]]; then
   REPORT="${2:-docs/validation-report.md}"

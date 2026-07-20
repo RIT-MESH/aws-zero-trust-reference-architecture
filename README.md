@@ -218,31 +218,79 @@ SECURITY.md
   serving `GET /health` -> 200, and placeholders replaced with your values.
 
 ## Safe local validation (no AWS credentials)
+## Safe local validation (no AWS credentials)
+
+No AWS credentials and no AWS API calls are required. Two options:
+
+### Option A - default (no env vars needed)
+
+`terraform validate` does not call AWS, so it works with no credentials at all:
 
 ```bash
-# Format check
 terraform fmt -check -recursive
 
-# Validate both examples (no plan, no apply, no AWS creds)
 cd examples/production && terraform init -backend=false && terraform validate && cd -
 cd examples/lab       && terraform init -backend=false && terraform validate && cd -
 
-# Native Terraform tests (mock provider)
 ( cd modules/rds    && terraform init -backend=false && terraform test )
 ( cd modules/network && terraform init -backend=false && terraform test )
 
-# Static security-invariant tests
 python -m pytest tests/python -q
 
-# IaC scanning (0 failed expected)
 checkov -d examples/production --framework terraform --quiet
 checkov -d examples/lab       --framework terraform --quiet
+```
 
-# Or run the orchestrator (on Linux/macOS/CI):
+### Option B - explicit offline-validation mode (fake placeholder credentials)
+
+If your environment requires the AWS provider to see *some* credential values
+before it will init/validate, use the offline-validation mode. This exports
+**fake placeholder** AWS environment variables (not real, valid, live, temporary,
+sandbox, or test-account credentials) and sets `offline_validation=true`, which
+makes the provider skip credential, metadata, and account-id checks. **No AWS API
+calls are made, and `terraform plan`/`apply` are never run** (data sources still
+require real AWS access, which these dummy values cannot provide).
+
+```bash
+# 1) Export fake placeholder env vars (session only; never written to ~/.aws/credentials)
+source scripts/offline-env.sh
+export TF_VAR_offline_validation=true
+
+# 2) Init + validate + mocked tests (no AWS API calls, no plan, no apply)
+cd examples/production && terraform init -backend=false && terraform validate && cd -
+cd examples/lab       && terraform init -backend=false && terraform validate && cd -
+( cd modules/rds    && terraform init -backend=false && terraform test )
+( cd modules/network && terraform init -backend=false && terraform test )
+
+# 3) When finished, unset them (or start a new shell):
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
+      AWS_DEFAULT_REGION AWS_REGION AWS_EC2_METADATA_DISABLED TF_VAR_offline_validation
+```
+
+`scripts/validate.sh` already sources `scripts/offline-env.sh` and sets
+`TF_VAR_offline_validation=true` for you, so the simplest path is:
+
+```bash
 bash scripts/validate.sh
 ```
 
-Results are recorded in [`docs/validation-report.md`](docs/validation-report.md).
+The dummy values are:
+
+| Variable | Value |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | `mock_access_key` |
+| `AWS_SECRET_ACCESS_KEY` | `mock_secret_key` |
+| `AWS_SESSION_TOKEN` | `mock_session_token` |
+| `AWS_DEFAULT_REGION` | `ap-northeast-1` |
+| `AWS_REGION` | `ap-northeast-1` |
+| `AWS_EC2_METADATA_DISABLED` | `true` |
+
+These exist only to satisfy AWS provider credential parsing during offline
+validation. They are **not** real or valid AWS credentials and must never be used
+against any real AWS account. No live AWS deployment occurred; this repository is
+not applied automatically.
+
+Results are recorded in [docs/validation-report.md](docs/validation-report.md).
 
 ## Lab and production usage examples
 

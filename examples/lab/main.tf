@@ -8,6 +8,15 @@ provider "aws" {
       example    = "lab"
     })
   }
+
+  # Offline validation only. These skips disable AWS credential, metadata, and
+  # account-id checks so Terraform can init and validate with fake placeholder
+  # credentials and no AWS API calls. They do NOT make terraform plan/apply
+  # work offline (data sources still require AWS); never run plan/apply with the
+  # dummy credentials. See scripts/offline-env.sh and the README.
+  skip_credentials_validation = var.offline_validation
+  skip_metadata_api_check     = var.offline_validation
+  skip_requesting_account_id  = var.offline_validation
 }
 
 # Lab = cost-sensitive: single NAT GW, smaller RDS, single-AZ DB, fewer tasks.
