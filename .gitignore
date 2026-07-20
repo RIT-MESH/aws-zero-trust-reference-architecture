@@ -1,0 +1,54 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+**/*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+*.lock.hcl
+**/.terraform.lock.hcl
+
+# Keep examples' lock files? Do NOT commit lock files to avoid drift; CI regenerates them.
+
+# Secrets / local data
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/.env
+**/.env.*
+**/secrets.tfvars
+**/terraform.tfvars
+**/*.auto.tfvars
+*.kubeconfig
+*.pem
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# Reports / generated
+**/checkov-results.json
+**/tfsec-results.sarif
+*.tfplan
+coverage.xml
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Plan / apply artifacts
+plan.json
+apply.log
