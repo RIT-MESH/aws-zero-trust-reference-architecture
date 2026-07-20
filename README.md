@@ -58,6 +58,111 @@ Security Hub/Inspector + CloudWatch alarms).
 
 ## Architecture diagram
 
+This is the topology of the two-AZ Zero Trust architecture. GitHub renders the
+Mermaid block below natively; a plain-text version follows for non-rendered viewers.
+
+```mermaid
+flowchart TD
+  classDef pub fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef app fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef data fill:#fecaca,stroke:#b91c1c,color:#1f2937
+  classDef sec fill:#e0e7ff,stroke:#4338ca,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#374151,color:#1f2937
+
+  INET((Internet)):::ext
+  R53[Route 53<br/>optional, placeholder hosted zone]:::ext
+  CF[CloudFront<br/>optional, security headers]:::ext
+  WAF[AWS WAFv2<br/>Common + Known Bad Inputs + IP reputation<br/>+ Anonymous IP + Linux/Log4j + rate-based]:::sec
+  ALB[Internet-facing ALB<br/>TLS 1.2/1.3, HTTP->HTTPS redirect]:::pub
+
+  subgraph VPC [VPC - two Availability Zones]
+    direction TB
+    subgraph Pub [Public subnets - ALB + NAT only]
+      ALB
+      NAT1[NAT Gateway AZ-A]:::pub
+      NAT2[NAT Gateway AZ-B<br/>prod only; lab uses 1 shared NAT]:::pub
+    end
+    subgraph App [Private app subnets - no public IPs]
+      ECS1[ECS Fargate task AZ-A]:::app
+      ECS2[ECS Fargate task AZ-B]:::app
+      EP[Interface VPC endpoints<br/>SSM / SSM Messages / EC2 Messages<br/>Logs / Secrets Manager / KMS / ECR]:::sec
+    end
+    subgraph Data [Isolated data subnets - no default route]
+      RDS[(RDS PostgreSQL<br/>Multi-AZ, CMK, force_ssl,<br/>Secrets Manager creds)]:::data
+    end
+    S3G[S3 gateway VPC endpoint]:::sec
+    DSG[Default SG restricted]:::sec
+  end
+
+  subgraph Logging [Centralized logging - KMS-encrypted, access-logged S3]
+    S3[(S3 logging bucket<br/>versioned, SSE-KMS, public block)]:::sec
+    CT[CloudTrail<br/>mgmt + S3 data events + Insights + SNS]:::sec
+    CW[(CloudWatch Logs<br/>KMS, 365d audit)]:::sec
+  end
+
+  subgraph SecSvc [Detection, compliance, vulnerability mgmt]
+    GD[GuardDuty + malware protection]:::sec
+    SH[Security Hub<br/>CIS + AWS Foundational]:::sec
+    INSP[Inspector v2<br/>ECR + EC2]:::sec
+    CFG[AWS Config + conformance pack]:::sec
+    ALARM[CloudWatch alarm<br/>High-severity GuardDuty -> SNS]:::sec
+  end
+
+  subgraph IAM [Identity]
+    IDC[IAM Identity Center<br/>documented, not provisioned]:::sec
+    BG[Break-glass role<br/>MFA-gated, no permanent cred]:::sec
+    PB[Permission boundary<br/>+ example SCP]:::sec
+  end
+
+  INET --> R53 --> CF --> WAF --> ALB
+  INET -. direct .-> WAF
+  ALB ==>|SG ref| ECS1
+  ALB ==>|SG ref| ECS2
+  ECS1 -->|SG ref, 5432 only| RDS
+  ECS2 -->|SG ref, 5432 only| RDS
+  ECS1 -. via endpoints .-> EP
+  ECS2 -. via endpoints .-> EP
+  ECS1 -. via S3 gateway .-> S3G
+  App -. egress to internet .-> NAT1
+  App -. egress to internet .-> NAT2
+  ALB -. access logs .-> S3
+  WAF -. logs .-> S3
+  CT --> S3
+  CT --> CW
+  RDS -. postgresql logs .-> CW
+  ECS1 -. container logs .-> CW
+  ECS2 -. container logs .-> CW
+  FL[(VPC Flow Logs)]:::sec -. CloudWatch .-> CW
+  FL[(VPC Flow Logs)] -. S3 parquet .-> S3
+  GD --> ALARM
+  ALARM --> SNS[SNS topic]:::sec
+  GD -. findings .-> SH
+  INSP -. findings .-> SH
+  CFG -. drift .-> SH
+  KMS[(KMS CMKs<br/>logs/rds/secrets/s3/cloudtrail<br/>annual rotation)]:::sec
+  S3 -. encrypted .-> KMS
+  CW -. encrypted .-> KMS
+  RDS -. encrypted .-> KMS
+  IDC -. workforce access .-> BG
+```
+
+<details><summary>Plain-text topology</summary>
+
+```
+Internet -> Route 53 (optional) -> CloudFront (optional) -> AWS WAF -> ALB (public subnets)
+ALB --SG ref--> ECS Fargate (private app subnets, no public IP)
+ECS --SG ref, 5432 only--> RDS PostgreSQL (isolated data subnets, no default route)
+ECS --interface endpoints--> SSM/Logs/Secrets/KMS/ECR ; ECS --S3 gateway--> S3
+ECS --NAT--> internet (no public IP on tasks)
+Telemetry: CloudTrail, VPC Flow Logs, ALB/WAF logs, RDS/ECS logs -> S3 (KMS) + CloudWatch (KMS, 365d)
+Detection: GuardDuty -> CloudWatch alarm -> SNS ; Security Hub aggregates CIS + Foundational + Inspector + Config
+Identity: IAM Identity Center (docs) ; MFA break-glass role ; permission boundary + example SCP
+Encryption: KMS CMKs (logs/rds/secrets/s3/cloudtrail) with annual rotation ; rds.force_ssl=1 ; S3 deny-insecure
+```
+
+</details>
+
+
 See [`docs/architecture.md`](docs/architecture.md) for the full diagram (ASCII +
 Mermaid) and the tier/route-table breakdown.
 
@@ -81,25 +186,25 @@ Mermaid) and the tier/route-table breakdown.
 
 ```
 .
-├── modules/
-│   ├── network/            # VPC, subnets, route tables, flow logs, endpoints, default SG
-│   ├── kms/                # customer-managed KMS keys with rotation
-│   ├── s3-logging/         # centralized, encrypted, access-logged S3 bucket
-│   ├── cloudtrail/         # CloudTrail + SNS + CloudWatch Logs + Insights
-│   ├── edge/               # ALB, WAF, target group, app SG, listeners
-│   ├── ecs-app/            # ECS Fargate service, roles, autoscaling
-│   ├── rds/                # RDS PostgreSQL, parameter group, monitoring
-│   ├── security-services/  # Config, GuardDuty, Security Hub, Inspector, alarms
-│   └── iam/               # break-glass role, permission boundary, example SCP
-├── examples/
-│   ├── production/         # Multi-AZ, NAT per AZ, full security, 365d audit logs
-│   └── lab/                # cost-sensitive: single NAT, single-AZ RDS, 1 task
-├── modules/{rds,network}/tests/  # native Terraform tests (mock provider)
-├── tests/python/           # static security-invariant tests (pytest)
-├── scripts/validate.sh     # offline validation orchestration (CI)
-├── .github/workflows/      # validate + codeql workflows
-├── docs/                   # architecture, threat model, controls, ops, IR, cost
-└── SECURITY.md
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ modules/
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ network/            # VPC, subnets, route tables, flow logs, endpoints, default SG
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ kms/                # customer-managed KMS keys with rotation
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ s3-logging/         # centralized, encrypted, access-logged S3 bucket
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ cloudtrail/         # CloudTrail + SNS + CloudWatch Logs + Insights
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ edge/               # ALB, WAF, target group, app SG, listeners
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ ecs-app/            # ECS Fargate service, roles, autoscaling
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ rds/                # RDS PostgreSQL, parameter group, monitoring
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ security-services/  # Config, GuardDuty, Security Hub, Inspector, alarms
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ iam/               # break-glass role, permission boundary, example SCP
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ examples/
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ production/         # Multi-AZ, NAT per AZ, full security, 365d audit logs
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ lab/                # cost-sensitive: single NAT, single-AZ RDS, 1 task
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ modules/{rds,network}/tests/  # native Terraform tests (mock provider)
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ tests/python/           # static security-invariant tests (pytest)
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ scripts/validate.sh     # offline validation orchestration (CI)
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ .github/workflows/      # validate + codeql workflows
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ docs/                   # architecture, threat model, controls, ops, IR, cost
+Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ SECURITY.md
 ```
 
 ## Prerequisites
