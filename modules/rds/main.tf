@@ -5,8 +5,6 @@ locals {
   })
 }
 
-data "aws_region" "current" {}
-
 # -----------------------------------------------------------------------------
 # Security group for the database: allow PostgreSQL (5432) only from the app SG.
 # The egress block uses an empty cidr_blocks list to deny all egress from the

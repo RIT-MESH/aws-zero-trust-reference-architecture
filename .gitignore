@@ -52,3 +52,13 @@ __pycache__/
 # Plan / apply artifacts
 plan.json
 apply.log
+
+# Backend config (filled-in) and local plan artifacts
+backend.hcl
+**/tfplan
+tfplan
+
+# AWS credential files (never commit)
+**/credentials.csv
+**/.aws/
+

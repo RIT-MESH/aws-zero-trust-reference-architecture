@@ -17,13 +17,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Enable offline validation: source fake placeholder AWS env vars (not real/valid/live/
-# sandbox/test-account credentials) and tell the examples to skip AWS credential,
-# metadata, and account-id checks. No AWS API calls are made; terraform plan/apply are
-# never run by this script. See scripts/offline-env.sh.
-# shellcheck source=/dev/null
-source "$ROOT/scripts/offline-env.sh"
-export TF_VAR_offline_validation=true
 
 REPORT=""
 if [[ "${1:-}" == "--report" ]]; then
@@ -177,6 +170,113 @@ if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
   fi
 else
   skip "python not installed (YAML/JSON check)"
+fi
+
+# -----------------------------------------------------------------------------
+# 8) tflint (optional)
+# -----------------------------------------------------------------------------
+begin
+log "tflint"
+if command -v tflint >/dev/null 2>&1; then
+  tflint_failed=0
+  for d in examples/production examples/lab modules/network modules/kms modules/s3-logging modules/cloudtrail modules/edge modules/ecs-app modules/rds modules/security-services modules/iam; do
+    if ! tflint --chdir="$d" >/tmp/tflint.out 2>&1; then
+      tflint_failed=1
+      echo "[validate][FAIL] tflint: $d" >&2
+      sed 's/^/    /' /tmp/tflint.out >&2
+    fi
+  done
+  if [[ "$tflint_failed" -eq 0 ]]; then ok "tflint (examples + modules)"; else fail "tflint reported issues"; record "- FAIL: tflint reported issues"; fi
+else
+  skip "tflint not installed"
+fi
+
+# -----------------------------------------------------------------------------
+# 9) yamllint (optional, uses .yamllint config)
+# -----------------------------------------------------------------------------
+begin
+log "yamllint"
+if command -v yamllint >/dev/null 2>&1; then
+  mapfile -t YAMLFILES < <(find .github -name '*.yml' -o -name '*.yaml')
+  if yamllint -c .yamllint "${YAMLFILES[@]}" >/tmp/yamllint.out 2>&1; then
+    ok "yamllint (GitHub Actions + config YAML)"
+  else
+    fail "yamllint reported issues"
+    sed 's/^/    /' /tmp/yamllint.out >&2
+    record "- FAIL: yamllint reported issues"
+  fi
+else
+  skip "yamllint not installed"
+fi
+
+# -----------------------------------------------------------------------------
+# 10) actionlint (optional)
+# -----------------------------------------------------------------------------
+begin
+log "actionlint"
+if command -v actionlint >/dev/null 2>&1; then
+  mapfile -t WFFILES < <(find .github/workflows -name '*.yml')
+  if actionlint "${WFFILES[@]}" >/tmp/actionlint.out 2>&1; then
+    ok "actionlint (GitHub Actions workflows)"
+  else
+    fail "actionlint reported issues"
+    sed 's/^/    /' /tmp/actionlint.out >&2
+    record "- FAIL: actionlint reported issues"
+  fi
+else
+  skip "actionlint not installed"
+fi
+
+# -----------------------------------------------------------------------------
+# 11) shellcheck (optional)
+# -----------------------------------------------------------------------------
+begin
+log "shellcheck"
+if command -v shellcheck >/dev/null 2>&1; then
+  if shellcheck -x scripts/validate.sh >/tmp/shellcheck.out 2>&1; then
+    ok "shellcheck (scripts/validate.sh)"
+  else
+    fail "shellcheck reported issues"
+    sed 's/^/    /' /tmp/shellcheck.out >&2
+    record "- FAIL: shellcheck reported issues"
+  fi
+else
+  skip "shellcheck not installed"
+fi
+
+# -----------------------------------------------------------------------------
+# 12) gitleaks secret scan (optional)
+# -----------------------------------------------------------------------------
+begin
+log "gitleaks secret scan"
+if command -v gitleaks >/dev/null 2>&1; then
+  if gitleaks detect --source . --no-banner --redact >/tmp/gitleaks.out 2>&1; then
+    ok "gitleaks (no secrets detected)"
+  else
+    fail "gitleaks detected potential secrets"
+    sed 's/^/    /' /tmp/gitleaks.out >&2
+    record "- FAIL: gitleaks detected potential secrets"
+  fi
+else
+  skip "gitleaks not installed"
+fi
+
+# -----------------------------------------------------------------------------
+# 13) markdownlint (pymarkdown, optional, uses pymarkdown-config.json)
+# -----------------------------------------------------------------------------
+begin
+log "markdownlint (pymarkdown)"
+if command -v pymarkdown >/dev/null 2>&1; then
+  mapfile -t MDFILES < <(find . docs modules examples tests scripts -name '*.md' 2>/dev/null)
+  if pymarkdown -c pymarkdown-config.json scan "${MDFILES[@]}" >/tmp/markdownlint.out 2>&1; then
+    ok "markdownlint (pymarkdown)"
+  else
+    fail "markdownlint reported issues"
+    sed 's/^/    /' /tmp/markdownlint.out >&2
+    record "- FAIL: markdownlint reported issues"
+  fi
+else
+  skip "pymarkdown not installed (markdownlint)"
 fi
 
 record ""

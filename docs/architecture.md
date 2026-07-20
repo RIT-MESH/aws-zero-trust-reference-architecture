@@ -8,7 +8,7 @@ Application Load Balancer; application workloads run in private subnets with no
 public IPs; data lives in isolated subnets; and the whole platform emits
 continuous telemetry to encrypted, access-logged storage.
 
-```
+```text
                        Internet
                           |
                     +-----------+

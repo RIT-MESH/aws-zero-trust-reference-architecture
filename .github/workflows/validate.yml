@@ -14,18 +14,6 @@ jobs:
   validate:
     name: Terraform, tests, and IaC security validation
     runs-on: ubuntu-latest
-    env:
-      # Fake placeholder AWS values for OFFLINE validation only. Not real, valid, live,
-      # temporary, sandbox, or test-account credentials. They only satisfy the AWS
-      # Terraform provider's credential parsing; no AWS API calls are made and
-      # terraform plan/apply are never run in CI. See scripts/offline-env.sh.
-      AWS_ACCESS_KEY_ID: mock_access_key
-      AWS_SECRET_ACCESS_KEY: mock_secret_key
-      AWS_SESSION_TOKEN: mock_session_token
-      AWS_DEFAULT_REGION: ap-northeast-1
-      AWS_REGION: ap-northeast-1
-      AWS_EC2_METADATA_DISABLED: "true"
-      TF_VAR_offline_validation: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +21,12 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -42,7 +36,14 @@ jobs:
       - name: Install Python tooling
         run: |
           python -m pip install --upgrade pip
-          pip install -r tests/python/requirements.txt checkov PyYAML
+          pip install -r tests/python/requirements.txt checkov PyYAML yamllint pymarkdownlnt
+
+      - name: Install shellcheck, actionlint, gitleaks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          curl -sSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz | tar -xz -C /usr/local/bin actionlint
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar -xz -C /usr/local/bin gitleaks
 
       - name: Terraform format check
         run: terraform fmt -check -recursive -write=false .
@@ -83,10 +84,10 @@ jobs:
       - name: YAML/JSON well-formedness
         run: python scripts/_check_yaml_json.py
 
-      - name: Full validation script
+      - name: Full validation script (tflint, yamllint, actionlint, shellcheck, gitleaks, markdownlint)
         run: bash scripts/validate.sh
 
-      - name: Upload checkov reports
+      - name: Upload validation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -95,4 +96,10 @@ jobs:
             /tmp/checkov.out
             /tmp/pytest.out
             /tmp/tftest.out
+            /tmp/tflint.out
+            /tmp/yamllint.out
+            /tmp/actionlint.out
+            /tmp/shellcheck.out
+            /tmp/gitleaks.out
+            /tmp/markdownlint.out
           if-no-files-found: ignore

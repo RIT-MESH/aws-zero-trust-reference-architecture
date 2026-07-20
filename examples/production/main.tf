@@ -3,21 +3,14 @@ provider "aws" {
 
   default_tags {
     tags = merge(var.tags, {
-      project    = "aws-zero-trust-reference-architecture"
-      managed_by = "terraform"
-      example    = "production"
+      project     = "aws-zero-trust-reference-architecture"
+      managed_by  = "terraform"
+      example     = "production"
+      environment = var.environment
     })
   }
-
-  # Offline validation only. These skips disable AWS credential, metadata, and
-  # account-id checks so Terraform can init and validate with fake placeholder
-  # credentials and no AWS API calls. They do NOT make terraform plan/apply
-  # work offline (data sources still require AWS); never run plan/apply with the
-  # dummy credentials. See scripts/offline-env.sh and the README.
-  skip_credentials_validation = var.offline_validation
-  skip_metadata_api_check     = var.offline_validation
-  skip_requesting_account_id  = var.offline_validation
 }
+
 
 # -----------------------------------------------------------------------------
 # KMS keys (customer-managed) for logs, rds, secrets, s3, cloudtrail
@@ -49,7 +42,6 @@ module "cloudtrail" {
   source = "../../modules/cloudtrail"
 
   name_prefix            = var.name_prefix
-  trail_bucket_arn       = module.logging_bucket.bucket_arn
   trail_bucket_name      = module.logging_bucket.bucket_name
   kms_key_arn            = module.kms.key_arns["cloudtrail"]
   enable_cloudwatch_logs = true
@@ -101,7 +93,6 @@ module "app" {
   source = "../../modules/ecs-app"
 
   name_prefix           = var.name_prefix
-  vpc_id                = module.network.vpc_id
   subnet_ids            = values(module.network.private_app_subnet_ids)
   app_security_group_id = module.edge.app_security_group_id
   target_group_arn      = module.edge.target_group_arn

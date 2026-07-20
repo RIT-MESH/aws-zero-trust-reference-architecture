@@ -28,21 +28,30 @@ via `.github/workflows/validate.yml`.
 | 3 | `terraform init -backend=false` + `terraform validate` (examples/lab) | PASS - "Success! The configuration is valid." |
 | 4 | `terraform test` (modules/rds, mock provider) | PASS - 4 passed, 0 failed |
 | 5 | `terraform test` (modules/network, mock provider) | PASS - 3 passed, 0 failed |
-| 6 | `python -m pytest tests/python` | PASS - 14 passed |
+| 6 | `python -m pytest tests/python` | PASS - 16 passed |
 | 7 | `checkov -d examples/production` | PASS - 266 passed, 0 failed, 32 skipped (justified) |
 | 8 | `checkov -d examples/lab` | PASS - 267 passed, 0 failed, 31 skipped (justified) |
-| 9 | YAML/JSON well-formedness (`scripts/_check_yaml_json.py`) | PASS |
-| 10 | No forbidden/sensitive tracked files (git ls-files) | PASS |
+| 9 | `tflint` (examples + all modules) | PASS - no issues |
+| 10 | `yamllint` (GitHub Actions + config YAML, `.yamllint`) | PASS (only `truthy` warnings, disabled-as-warning) |
+| 11 | `actionlint` (`.github/workflows/*.yml`) | PASS |
+| 12 | `shellcheck -x scripts/validate.sh` | PASS |
+| 13 | `gitleaks detect --source .` | PASS - no leaks found |
+| 14 | `pymarkdown` markdownlint (`.md`, `pymarkdown-config.json`) | PASS |
+| 15 | YAML/JSON well-formedness (`scripts/_check_yaml_json.py`) | PASS |
+| 16 | No forbidden/sensitive tracked files (git ls-files) | PASS |
+| 17 | No AWS key patterns / private keys committed | PASS |
 
 ## Native Terraform test cases (mock provider, no AWS)
 
 `modules/rds/tests/rds.tftest.hcl`:
+
 - RDS is not publicly accessible
 - RDS storage is encrypted
 - RDS has deletion protection and >=7-day backups
 - DB security group has exactly one ingress (PostgreSQL from app SG)
 
 `modules/network/tests/network.tftest.hcl`:
+
 - Private app and isolated data subnets do not map public IPs
 - VPC Flow Logs to CloudWatch are enabled
 - S3 gateway VPC endpoint exists
@@ -50,6 +59,7 @@ via `.github/workflows/validate.yml`.
 ## Python security-invariant tests
 
 `tests/python/test_security_invariants.py` asserts (statically, no AWS):
+
 - No SSH (22) or RDP (3389) ingress anywhere
 - RDS not publicly accessible + module enforces `false` default
 - ECS workloads have no public IP
@@ -87,39 +97,6 @@ scope, and DB SG deny-all egress false positive).
 - No live AWS resources were created, changed, or destroyed.
 - No AWS credentials were required for any check above.
 
-## Offline-validation mode (fake placeholder credentials)
-
-The repository supports an explicit offline-validation mode for environments that
-require the AWS Terraform provider to see credential values before it will
-init/validate. This mode uses **fake placeholder** AWS environment variables only:
-
-| Variable | Value |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | `mock_access_key` |
-| `AWS_SECRET_ACCESS_KEY` | `mock_secret_key` |
-| `AWS_SESSION_TOKEN` | `mock_session_token` |
-| `AWS_DEFAULT_REGION` | `ap-northeast-1` |
-| `AWS_REGION` | `ap-northeast-1` |
-| `AWS_EC2_METADATA_DISABLED` | `true` |
-
-These are **not** real, valid, live, temporary, sandbox, or test-account AWS
-credentials. They exist solely to satisfy the provider's credential parsing during
-offline validation. They are exported into the shell session only (via
-`scripts/offline-env.sh`) and are **never** written to `~/.aws/credentials`.
-
-When `offline_validation=true` (set via `TF_VAR_offline_validation=true`), each
-example's `provider "aws"` block sets `skip_credentials_validation`,
-`skip_metadata_api_check`, and `skip_requesting_account_id`. This lets
-`terraform init`/`validate`/`test` run with **no AWS API calls**. It does **not**
-make `terraform plan`/`apply` work offline (data sources still require real AWS
-access), and `terraform plan`/`apply` are never run with these dummy values.
-
-Verified locally with the dummy env vars and `TF_VAR_offline_validation=true`:
-`terraform init` + `terraform validate` pass for both examples; native Terraform
-tests pass (rds 4/4, network 3/3); pytest passes (14/14). The default mode
-(`offline_validation=false`, no env vars) also passes. No AWS API was contacted,
-no `terraform plan`/`apply` was run, and no AWS resources were created, modified,
-or destroyed.
 ## CI status (GitHub Actions)
 
 The repository ships two workflows plus a Dependabot configuration:

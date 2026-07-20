@@ -4,11 +4,6 @@ variable "name_prefix" {
   default     = "zt"
 }
 
-variable "vpc_id" {
-  description = "VPC ID."
-  type        = string
-}
-
 variable "subnet_ids" {
   description = "Private application subnet IDs for the ECS service."
   type        = list(string)

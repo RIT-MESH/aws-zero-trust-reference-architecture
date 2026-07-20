@@ -4,11 +4,6 @@ variable "name_prefix" {
   default     = "zt"
 }
 
-variable "trail_bucket_arn" {
-  description = "S3 bucket ARN for CloudTrail log delivery (use the s3-logging module)."
-  type        = string
-}
-
 variable "trail_bucket_name" {
   description = "S3 bucket name for CloudTrail log delivery."
   type        = string

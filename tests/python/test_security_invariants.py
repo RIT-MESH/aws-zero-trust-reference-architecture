@@ -181,3 +181,40 @@ def test_data_tier_has_no_default_route():
     body = m.group(1)
     assert not re.search(r'route\s*\{(?:(?!\n\}).)*?0\.0\.0\.0/0', body, re.DOTALL), \
         "Data tier route table must not have a default route to the internet"
+
+def _text_files():
+    exts = (".tf", ".tfvars", ".tfvars.example", ".hcl", ".hcl.example", ".yml", ".yaml", ".sh", ".py", ".md", ".json", ".example")
+    for p in ROOT.rglob("*"):
+        if not p.is_file():
+            continue
+        if any(seg in p.parts for seg in (".git", ".terraform", "__pycache__")):
+            continue
+        if p.suffix in exts or p.name.endswith(".hcl.example") or p.name == "backend.hcl.example":
+            yield p
+
+
+def test_no_aws_key_patterns_committed():
+    """No real-looking AWS access keys, secret keys, or private keys are committed."""
+    access_key = re.compile(r"AKIA[0-9A-Z]{16}")
+    secret_assign = re.compile(r'aws_secret_access_key\s*=\s*["\'][A-Za-z0-9/+=]{40}["\']')
+    private_key = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+    offenders = []
+    for p in _text_files():
+        text = p.read_text(encoding="utf-8", errors="ignore")
+        for m in access_key.finditer(text):
+            offenders.append((str(p.relative_to(ROOT)), "AWS access key id", m.group(0)))
+        for m in secret_assign.finditer(text):
+            offenders.append((str(p.relative_to(ROOT)), "AWS secret key assignment", m.group(0)))
+        for m in private_key.finditer(text):
+            offenders.append((str(p.relative_to(ROOT)), "private key block", m.group(0)))
+    assert not offenders, f"Possible real credentials committed: {offenders}"
+
+
+def test_no_hardcoded_provider_credentials():
+    """Provider blocks must not hard-code access_key/secret_key/session_token."""
+    for p in tf_files():
+        body = read(p)
+        for m in re.finditer(r'provider\s+"aws"\s+\{(.*?)\n\}', body, re.DOTALL):
+            for attr in ("access_key", "secret_key", "token"):
+                assert re.search(rf'^\s*{attr}\s*=', m.group(1), re.MULTILINE) is None, \
+                    f"provider \"aws\" in {p} must not set {attr}"

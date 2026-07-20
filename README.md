@@ -148,7 +148,7 @@ flowchart TD
 
 <details><summary>Plain-text topology</summary>
 
-```
+```text
 Internet -> Route 53 (optional) -> CloudFront (optional) -> AWS WAF -> ALB (public subnets)
 ALB --SG ref--> ECS Fargate (private app subnets, no public IP)
 ECS --SG ref, 5432 only--> RDS PostgreSQL (isolated data subnets, no default route)
@@ -161,7 +161,6 @@ Encryption: KMS CMKs (logs/rds/secrets/s3/cloudtrail) with annual rotation ; rds
 ```
 
 </details>
-
 
 See [`docs/architecture.md`](docs/architecture.md) for the full diagram (ASCII +
 Mermaid) and the tier/route-table breakdown.
@@ -201,10 +200,12 @@ examples/
 modules/rds/tests/        # native Terraform tests (mock provider)
 modules/network/tests/    # native Terraform tests (mock provider)
 tests/python/             # static security-invariant tests (pytest)
-scripts/validate.sh       # offline validation orchestration (CI)
-.github/workflows/        # validate + codeql workflows
+scripts/validate.sh       # validation orchestration (CI)
+backend.hcl.example       # placeholder S3 remote-backend config
+.github/workflows/        # validate + codeql + terraform-deploy.example
 .github/dependabot.yml    # Dependabot config
-docs/                     # architecture, threat model, controls, ops, IR, cost
+docs/                     # architecture, threat model, controls, ops, IR, cost,
+                          # deployment, aws-authentication, github-oidc, testing
 SECURITY.md
 ```
 
@@ -217,78 +218,69 @@ SECURITY.md
 - For real deployment: an AWS account, an ACM certificate, a container image
   serving `GET /health` -> 200, and placeholders replaced with your values.
 
-## Safe local validation (no AWS credentials)
-## Safe local validation (no AWS credentials)
+## AWS authentication
 
-No AWS credentials and no AWS API calls are required. Two options:
+This project uses the standard AWS credential provider chain. No credentials are
+stored in the repository.
 
-### Option A - default (no env vars needed)
+Recommended for local use:
 
-`terraform validate` does not call AWS, so it works with no credentials at all:
+```bash
+aws configure sso
+aws sso login --profile zero-trust-prod
+export AWS_PROFILE=zero-trust-prod
+export AWS_REGION=ap-northeast-1
+```
+
+Alternative methods include an AWS CLI profile, environment-based credentials, an
+attached IAM role, or GitHub Actions OIDC.
+
+Verify authentication before planning:
+
+```bash
+aws sts get-caller-identity
+```
+
+Then initialize and review the deployment:
+
+```bash
+cd examples/production
+terraform init
+terraform fmt -check
+terraform validate
+terraform plan -out=tfplan
+terraform show tfplan
+```
+
+Apply only after reviewing the plan:
+
+```bash
+terraform apply tfplan
+```
+
+> Do not store AWS access keys in Terraform files, tfvars files, shell scripts,
+> GitHub repository variables, or committed configuration.
+
+See [docs/aws-authentication.md](docs/aws-authentication.md) and
+[docs/github-oidc.md](docs/github-oidc.md) for details.
+
+## Local validation and testing
+
+Automated checks run without contacting AWS: `terraform fmt`, `terraform validate`,
+native Terraform tests (mock provider), static Python tests, Checkov, TFLint, and
+secret scanning. See [docs/testing.md](docs/testing.md) for the full workflow.
 
 ```bash
 terraform fmt -check -recursive
-
-cd examples/production && terraform init -backend=false && terraform validate && cd -
-cd examples/lab       && terraform init -backend=false && terraform validate && cd -
-
+( cd examples/production && terraform init -backend=false && terraform validate )
+( cd examples/lab       && terraform init -backend=false && terraform validate )
 ( cd modules/rds    && terraform init -backend=false && terraform test )
 ( cd modules/network && terraform init -backend=false && terraform test )
-
 python -m pytest tests/python -q
-
 checkov -d examples/production --framework terraform --quiet
 checkov -d examples/lab       --framework terraform --quiet
-```
-
-### Option B - explicit offline-validation mode (fake placeholder credentials)
-
-If your environment requires the AWS provider to see *some* credential values
-before it will init/validate, use the offline-validation mode. This exports
-**fake placeholder** AWS environment variables (not real, valid, live, temporary,
-sandbox, or test-account credentials) and sets `offline_validation=true`, which
-makes the provider skip credential, metadata, and account-id checks. **No AWS API
-calls are made, and `terraform plan`/`apply` are never run** (data sources still
-require real AWS access, which these dummy values cannot provide).
-
-```bash
-# 1) Export fake placeholder env vars (session only; never written to ~/.aws/credentials)
-source scripts/offline-env.sh
-export TF_VAR_offline_validation=true
-
-# 2) Init + validate + mocked tests (no AWS API calls, no plan, no apply)
-cd examples/production && terraform init -backend=false && terraform validate && cd -
-cd examples/lab       && terraform init -backend=false && terraform validate && cd -
-( cd modules/rds    && terraform init -backend=false && terraform test )
-( cd modules/network && terraform init -backend=false && terraform test )
-
-# 3) When finished, unset them (or start a new shell):
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
-      AWS_DEFAULT_REGION AWS_REGION AWS_EC2_METADATA_DISABLED TF_VAR_offline_validation
-```
-
-`scripts/validate.sh` already sources `scripts/offline-env.sh` and sets
-`TF_VAR_offline_validation=true` for you, so the simplest path is:
-
-```bash
 bash scripts/validate.sh
 ```
-
-The dummy values are:
-
-| Variable | Value |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | `mock_access_key` |
-| `AWS_SECRET_ACCESS_KEY` | `mock_secret_key` |
-| `AWS_SESSION_TOKEN` | `mock_session_token` |
-| `AWS_DEFAULT_REGION` | `ap-northeast-1` |
-| `AWS_REGION` | `ap-northeast-1` |
-| `AWS_EC2_METADATA_DISABLED` | `true` |
-
-These exist only to satisfy AWS provider credential parsing during offline
-validation. They are **not** real or valid AWS credentials and must never be used
-against any real AWS account. No live AWS deployment occurred; this repository is
-not applied automatically.
 
 Results are recorded in [docs/validation-report.md](docs/validation-report.md).
 
@@ -361,6 +353,10 @@ This project is **not** applied automatically.
   tests, pytest, checkov (both examples), YAML/JSON check, and `validate.sh`.
   Minimal permissions; no AWS credentials; no real `terraform plan`.
 - `.github/workflows/codeql.yml` - CodeQL analysis for the Python test code.
+- `.github/workflows/terraform-deploy.example.yml` - optional OIDC deployment
+  workflow (plan on PRs, apply via a protected environment with manual approval).
+  Named `*.example.yml` so it does not run automatically; see
+  [docs/github-oidc.md](docs/github-oidc.md) to enable it.
 - `.github/dependabot.yml` - github-actions, terraform, and pip ecosystems.
 
 ## License

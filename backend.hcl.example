@@ -1,0 +1,21 @@
+# backend.hcl.example - partial backend configuration for the S3 remote backend.
+#
+# Copy to backend.hcl and replace the placeholders, then add the following block
+# to the example's `terraform {}` block (e.g. examples/production/versions.tf):
+#
+#   backend "s3" {
+#     # all values are supplied via -backend-config=backend.hcl
+#   }
+#
+# Then run:
+#   terraform init -backend-config=backend.hcl
+#
+# Do not commit backend.hcl (it is gitignored). Do not hard-code the state bucket
+# name in the repository. Bootstrap the bucket and DynamoDB lock table first - see
+# docs/deployment.md "Backend bootstrap".
+
+bucket         = "REPLACE_WITH_GLOBALLY_UNIQUE_STATE_BUCKET_NAME"
+key            = "aws-zero-trust-reference-architecture/terraform.tfstate"
+region         = "ap-northeast-1"
+encrypt        = true
+dynamodb_table = "REPLACE_WITH_DYNAMODB_LOCK_TABLE_NAME"
