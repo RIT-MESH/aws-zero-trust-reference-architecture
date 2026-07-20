@@ -7,10 +7,9 @@
 A production-oriented **Zero Trust reference architecture on AWS** built with
 Terraform: multi-AZ networking, least-privilege IAM, private workloads, customer
 managed encryption keys, continuous security monitoring, and DevSecOps
-validation that runs **without AWS credentials**.
+validation that runs ** AWS credentials**.
 
-> **Disclaimer:** This is a reference architecture for education and portfolio
-> purposes. It is **not** deployed or applied automatically anywhere. Review and
+> **Disclaimer:**  Review and
 > adapt it to your organization before any real use.
 
 ## Project overview
