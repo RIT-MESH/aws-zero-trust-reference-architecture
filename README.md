@@ -7,7 +7,7 @@
 A production-oriented **Zero Trust reference architecture on AWS** built with
 Terraform: multi-AZ networking, least-privilege IAM, private workloads, customer
 managed encryption keys, continuous security monitoring, and DevSecOps
-validation that runs ** AWS credentials**.
+validation that runs **without AWS credentials**.
 
 > **Disclaimer:**  Review and
 > adapt it to your organization before any real use.
@@ -186,25 +186,25 @@ Mermaid) and the tier/route-table breakdown.
 
 ```
 .
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ modules/
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ network/            # VPC, subnets, route tables, flow logs, endpoints, default SG
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ kms/                # customer-managed KMS keys with rotation
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ s3-logging/         # centralized, encrypted, access-logged S3 bucket
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ cloudtrail/         # CloudTrail + SNS + CloudWatch Logs + Insights
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ edge/               # ALB, WAF, target group, app SG, listeners
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ ecs-app/            # ECS Fargate service, roles, autoscaling
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ rds/                # RDS PostgreSQL, parameter group, monitoring
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ security-services/  # Config, GuardDuty, Security Hub, Inspector, alarms
-Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ iam/               # break-glass role, permission boundary, example SCP
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ examples/
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ production/         # Multi-AZ, NAT per AZ, full security, 365d audit logs
-Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ lab/                # cost-sensitive: single NAT, single-AZ RDS, 1 task
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ modules/{rds,network}/tests/  # native Terraform tests (mock provider)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ tests/python/           # static security-invariant tests (pytest)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ scripts/validate.sh     # offline validation orchestration (CI)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ .github/workflows/      # validate + codeql workflows
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ docs/                   # architecture, threat model, controls, ops, IR, cost
-Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ SECURITY.md
+ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ modules/
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ network/            # VPC, subnets, route tables, flow logs, endpoints, default SG
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ kms/                # customer-managed KMS keys with rotation
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ s3-logging/         # centralized, encrypted, access-logged S3 bucket
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ cloudtrail/         # CloudTrail + SNS + CloudWatch Logs + Insights
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ edge/               # ALB, WAF, target group, app SG, listeners
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ ecs-app/            # ECS Fargate service, roles, autoscaling
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ rds/                # RDS PostgreSQL, parameter group, monitoring
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ security-services/  # Config, GuardDuty, Security Hub, Inspector, alarms
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬ÂÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ iam/               # break-glass role, permission boundary, example SCP
+ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ examples/
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ production/         # Multi-AZ, NAT per AZ, full security, 365d audit logs
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬Å¡   ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬ÂÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ lab/                # cost-sensitive: single NAT, single-AZ RDS, 1 task
+ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ modules/{rds,network}/tests/  # native Terraform tests (mock provider)
+ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ tests/python/           # static security-invariant tests (pytest)
+ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ scripts/validate.sh     # offline validation orchestration (CI)
+ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ .github/workflows/      # validate + codeql workflows
+ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ docs/                   # architecture, threat model, controls, ops, IR, cost
+ÃƒÂ¢Ã¢â‚¬ÂÃ¢â‚¬ÂÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ SECURITY.md
 ```
 
 ## Prerequisites
