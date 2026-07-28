@@ -2,6 +2,119 @@
 
 Repository: `RIT-MESH/aws-zero-trust-reference-architecture`
 
+## Table of contents
+
+- [0. Before you begin (read this first)](#0-before-you-begin-read-this-first)
+- [1. What this project builds](#1-what-this-project-builds)
+- [2. Repository structure](#2-repository-structure)
+- [3. Cost warning](#3-cost-warning)
+- [4. Install the required tools](#4-install-the-required-tools)
+- [5. Clone the repository](#5-clone-the-repository)
+- [6. Understand the Terraform files](#6-understand-the-terraform-files)
+- [7. Configure AWS authentication](#7-configure-aws-authentication)
+- [8. Choose lab or production](#8-choose-lab-or-production)
+- [9. Create the variables file](#9-create-the-variables-file)
+- [10. Understand the network design](#10-understand-the-network-design)
+- [11. Create a simple application container](#11-create-a-simple-application-container)
+- [12. Create an ECR repository](#12-create-an-ecr-repository)
+- [13. Create an ACM certificate](#13-create-an-acm-certificate)
+- [14. Restrict incoming traffic](#14-restrict-incoming-traffic)
+- [15. Initialize Terraform](#15-initialize-terraform)
+- [16. Format and validate](#16-format-and-validate)
+- [17. Create and review a Terraform plan](#17-create-and-review-a-terraform-plan)
+- [18. Apply the infrastructure](#18-apply-the-infrastructure)
+- [19. Major components explained](#19-major-components-explained)
+- [20. Verify the deployment](#20-verify-the-deployment)
+- [21. Test the application](#21-test-the-application)
+- [22. Verify the Zero Trust security controls](#22-verify-the-zero-trust-security-controls)
+- [23. Run the repository tests](#23-run-the-repository-tests)
+- [24. Configure a production remote backend](#24-configure-a-production-remote-backend)
+- [25. How the project was likely developed](#25-how-the-project-was-likely-developed)
+- [26. Destroy the environment](#26-destroy-the-environment)
+- [27. Recommended learning order](#27-recommended-learning-order)
+- [28. Glossary](#28-glossary)
+- [29. Troubleshooting (common errors)](#29-troubleshooting-common-errors)
+- [30. Self-test questions](#30-self-test-questions)
+- [31. Where to learn the basics first](#31-where-to-learn-the-basics-first)
+
+---
+
+## 0. Before you begin (read this first)
+
+> **Note about the commands in this guide:** every command is written for
+> **Windows PowerShell**. Long commands use the backtick `` ` `` to continue on
+> the next line. On macOS/Linux (bash/zsh) replace the backtick with a backslash
+> `\`, and replace `Get-ChildItem` with `ls`, `Copy-Item` with `cp`, `notepad`
+> with `nano`/`vim`. The Terraform and AWS CLI commands themselves are identical
+> on every OS.
+
+### Who this guide is for
+
+You can follow this guide even if you have never used AWS or Terraform before.
+It explains each step with copy-paste commands and plain-language notes. You do
+not need to be a security expert.
+
+**Expected effort for the lab environment:**
+
+- Time: about 2–4 hours end to end (most of it is waiting for AWS to create
+  resources and reviewing the plan).
+- Difficulty: intermediate. You should be comfortable installing software and
+  using a terminal, but no prior AWS or Terraform knowledge is assumed.
+
+### A 10-step fast path
+
+If the 27 steps feel like a lot, here is the short version. Each links to the
+detailed section so you can go deeper when you need to.
+
+1. Install AWS CLI, Terraform, Git ([Section 4](#4-install-the-required-tools)).
+2. Clone this repository ([Section 5](#5-clone-the-repository)).
+3. Log in to AWS ([Section 7](#7-configure-aws-authentication)).
+4. Go to `examples/lab` ([Section 8](#8-choose-lab-or-production)).
+5. Fill in `terraform.tfvars` ([Section 9](#9-create-the-variables-file)).
+6. Build and push a container image ([Sections 11–12](#11-create-a-simple-application-container)).
+7. Create an HTTPS certificate ([Section 13](#13-create-an-acm-certificate)).
+8. `terraform init` then `terraform plan` ([Sections 15–17](#15-initialize-terraform)).
+9. `terraform apply` ([Section 18](#18-apply-the-infrastructure)).
+10. Verify, then `terraform destroy` when done ([Sections 20, 26](#20-verify-the-deployment)).
+
+### What is Zero Trust?
+
+Old security was a castle: strong walls (the firewall) around everything, and
+once you were *inside* the network you were trusted. If an attacker got past the
+gate, they could roam freely.
+
+Zero Trust is the opposite: **never trust, always verify.** It assumes the
+network is already hostile and checks *every* request as if it came from the
+public internet, no matter where it originated. Three ideas drive it:
+
+- **Verify explicitly** — every request is authenticated and authorized.
+- **Least privilege** — give the minimum access needed, nothing more.
+- **Assume breach** — design as if an attacker is already inside.
+
+### Real-world analogy
+
+Think of this architecture as a secure office building. You need the right
+keycard at *every* door, not just the front one. That is the heart of Zero Trust.
+
+| AWS component | Office building equivalent |
+|---|---|
+| AWS WAF | Guard at the front gate |
+| Application Load Balancer | Reception desk directing visitors |
+| ECS Fargate (the app) | Workers inside locked rooms |
+| RDS PostgreSQL | The vault |
+| Security groups | Keycards that open only specific doors |
+| CloudTrail | Security cameras (who did what) |
+| GuardDuty | Burglar alarm |
+| KMS | The locked key cabinet |
+
+### One idea to hold onto
+
+This project is **not** one giant configuration file. It is many small, focused
+pieces (called *modules*) connected through explicit inputs and outputs. If you
+understand that one idea, the whole repository makes sense.
+
+---
+
 ## 1. What this project builds
 
 This repository contains a production-oriented Zero Trust reference architecture on AWS using Terraform.
@@ -20,6 +133,32 @@ ECS Fargate application in private subnets
 RDS PostgreSQL in isolated subnets
 ```
 
+
+### The architecture as a picture
+
+```mermaid
+flowchart TD
+    Internet([Internet]) --> WAF[AWS WAF]
+    WAF --> ALB[Application Load Balancer]
+    ALB -->|HTTPS 443| ECS[ECS Fargate app<br/>private subnets]
+    ECS -->|TCP 5432| RDS[(RDS PostgreSQL<br/>isolated subnets)]
+    ECS -.->|VPC endpoints| AWS[AWS services<br/>SSM, ECR, KMS, Logs]
+    subgraph Monitoring[Security & monitoring]
+        CT[CloudTrail]
+        GD[GuardDuty]
+        SH[Security Hub]
+        CW[CloudWatch]
+    end
+    CT --> S3[(Encrypted S3<br/>log bucket)]
+    GD --> SH
+    SH --> CW
+end
+```
+
+The app and the database never get public IP addresses. Traffic is only allowed
+along the arrows above.
+
+---
 The architecture also includes:
 
 - CloudTrail
@@ -264,6 +403,26 @@ Expected output:
 
 Do not continue until this command works.
 
+### Alternative: access keys (for learning only)
+
+Setting up AWS IAM Identity Center (SSO) can itself take time. For a quick
+learning sandbox you may instead use long-lived access keys. **Only do this on a
+dedicated learning AWS account, never on a production account.**
+
+```powershell
+aws configure
+```
+
+Enter the Access Key ID, Secret Access Key, default region (for example
+`ap-northeast-1`), and output format `json`. Then verify:
+
+```powershell
+aws sts get-caller-identity
+```
+
+If you go this route, create the key in the IAM console under a user with limited
+permissions, and delete the key when you finish.
+
 ---
 
 ## 8. Choose lab or production
@@ -288,6 +447,21 @@ The production configuration includes stronger settings, such as:
 - Multi-AZ RDS
 - RDS deletion protection
 - Longer log retention
+
+### Lab vs. production at a glance
+
+| Setting | Lab | Production |
+|---|---|---|
+| Monthly cost (approx.) | USD 120–180 | USD 300–450+ |
+| NAT Gateways | 1 (shared) | 1 per Availability Zone |
+| ECS tasks | 1 | 3 |
+| RDS | Single instance | Multi-AZ |
+| RDS deletion protection | Off | On |
+| Log retention | Short | Long |
+| Purpose | Learn safely | Mirror a real workload |
+
+Start with the lab. Move to production only after you understand every line of
+the lab configuration.
 
 ---
 
@@ -615,6 +789,21 @@ Terraform will:
 
 For a first test, local Terraform state is acceptable.
 
+### What is Terraform state (and why it matters)?
+
+Terraform **state** (`terraform.tfstate`) is a JSON file that records everything
+Terraform has created so it can update or destroy it later. A few things a
+beginner must know:
+
+- **Never edit it by hand.** Let Terraform change it.
+- **It can contain secrets** — for example the RDS database password. So never
+  commit it to Git. This repository's `.gitignore` already excludes
+  `terraform.tfstate`.
+- **Do not lose it.** If you delete state, Terraform forgets what it created and
+  you must clean up resources manually in the AWS console.
+- For anything beyond a first local test, keep state in the encrypted remote
+  backend described in [Section 24](#24-configure-a-production-remote-backend).
+
 ---
 
 ## 16. Format and validate
@@ -886,6 +1075,22 @@ The break-glass role is for emergency use only.
 ---
 
 ## 20. Verify the deployment
+
+### What success looks like
+
+If everything worked, you should be able to confirm all of these:
+
+- `terraform output` shows an ALB DNS name, a VPC ID, an ECS cluster name, an
+  RDS endpoint, and a break-glass role ARN.
+- `aws ecs describe-services` shows the ECS service with `RUNNING` tasks.
+- `aws rds describe-db-instances` shows the database as `available`.
+- Visiting the ALB DNS `/health` returns `{"status":"healthy"}` (see
+  [Section 21](#21-test-the-application)).
+- `aws guardduty list-detectors` returns a detector, and
+  `aws securityhub describe-hub` succeeds.
+
+If any of these fail, jump to [Section 29 Troubleshooting](#29-troubleshooting-common-errors).
+
 
 Display outputs:
 
@@ -1300,6 +1505,42 @@ Afterward, check manually for:
 
 Some logging buckets and KMS keys may need manual cleanup.
 
+### Exact commands for leftover resources
+
+Terraform destroys most things, but some resources protect themselves and must
+be removed manually. Run these from your lab/production directory. Replace the
+placeholder names with your own.
+
+```powershell
+# 1. Empty and delete S3 log buckets (they cannot be deleted while non-empty)
+$Bucket = "zt-lab-logs-UNIQUE"
+aws s3 rm "s3://$Bucket" --recursive
+aws s3api delete-bucket --bucket $Bucket
+
+# 2. Delete the Terraform state bucket and lock table
+aws s3 rm "s3://ritesh-zero-trust-tfstate-UNIQUE-NUMBER" --recursive
+aws s3api delete-bucket --bucket "ritesh-zero-trust-tfstate-UNIQUE-NUMBER"
+aws dynamodb delete-table --table-name terraform-locks
+
+# 3. Schedule KMS keys for deletion (window 7 days)
+aws kms list-aliases --query "Aliases[?AliasName!='alias/aws/*].TargetKeyId" --output text
+aws kms schedule-key-deletion --key-id YOUR_KEY_ID --pending-window-in-days 7
+
+# 4. Delete the ECR repository (must be empty first)
+aws ecr delete-repository --repository-name zero-trust-app --force
+
+# 5. ACM certificates: cannot be deleted while attached to the ALB.
+#    Destroy Terraform first; any certificate still listed is usually safe to remove.
+aws acm list-certificates
+aws acm delete-certificate --certificate-arn YOUR_CERT_ARN
+
+# 6. Route 53 records you created manually
+aws route53 list-hosted-zones
+# aws route53 change-resource-record-sets --hosted-zone-id ZONE_ID --change-batch file://delete.json
+```
+
+Always check your AWS billing dashboard a day later to confirm charges stopped.
+
 ---
 
 ## 27. Recommended learning order
@@ -1334,3 +1575,122 @@ The root configuration passes values such as:
 - ECS cluster information
 
 from one module to another.
+
+
+---
+
+## 28. Glossary
+
+| Term | Plain meaning |
+|---|---|
+| AWS | Amazon's cloud platform where you rent servers and services |
+| Region | A geographic AWS data-center area, e.g. `ap-northeast-1` (Tokyo) |
+| VPC | Your own private network inside AWS |
+| Subnet | A slice of a VPC |
+| Public subnet | A subnet that can reach the internet |
+| Private subnet | A subnet with no direct internet path |
+| Isolated subnet | A subnet with no internet path at all |
+| Security group | A firewall rule attached to a resource |
+| NACL | Network-level firewall for a subnet |
+| IAM | AWS's user and permission system |
+| IAM Identity Center / SSO | Single sign-on for AWS users |
+| MFA | Multi-factor authentication (a second factor, e.g. an app code) |
+| ECS | Service that runs containers on AWS |
+| Fargate | Serverless container hosting (no EC2 servers to manage) |
+| ALB | Application Load Balancer; distributes incoming web traffic |
+| WAF | Web Application Firewall; blocks bad requests |
+| RDS | Managed relational database (PostgreSQL here) |
+| KMS | Key Management Service; creates/stores encryption keys |
+| CloudTrail | Audit log of every action taken in AWS |
+| CloudWatch | Logs, metrics, and alarms |
+| GuardDuty | Threat-detection service (the burglar alarm) |
+| Security Hub | Central view of security findings |
+| Inspector | Vulnerability scanner for ECR and compute |
+| AWS Config | Records resource configuration and drift |
+| S3 | Object storage (like a big file server) |
+| ECR | Container image registry (Docker images) |
+| ACM | AWS Certificate Manager; TLS/SSL certificates |
+| SSM | Systems Manager; manage instances and parameters |
+| Secrets Manager | Stores and rotates secrets like DB passwords |
+| SNS | Notification service |
+| VPC endpoint | Reach AWS services without going over the public internet |
+| NAT Gateway | Lets private subnets reach the internet for updates |
+| IGW | Internet Gateway; connects a VPC to the internet |
+| CIDR | A network range written like `10.20.0.0/16` |
+| Terraform | Tool that turns code into real cloud resources |
+| IaC | Infrastructure as Code; describing infrastructure in files |
+| Module | A reusable, self-contained Terraform package |
+| State | Terraform's record of what it created |
+| Provider | Terraform plugin that talks to a service (e.g. AWS) |
+| Plan | A preview of changes Terraform will make |
+| Apply | Execute the changes |
+| Destroy | Tear down everything Terraform created |
+| SCP | Service Control Policy; an organization-level permission guardrail |
+| Break-glass role | Emergency admin access used only when normal access fails |
+
+---
+
+## 29. Troubleshooting (common errors)
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `terraform init` hangs or fails downloading the AWS provider | Network/TLS issue or no credentials | Re-run `aws sts get-caller-identity`; if it fails, re-login. Try `terraform init -upgrade`. |
+| `AccessDenied` / `AuthorizationHeaderMalformed` | AWS session expired | Re-run `aws sso login --profile zero-trust-lab` (or `aws configure`). |
+| `Error: creating EC2 VPC: UnauthorizedOperation` | IAM user/role lacks permissions | Use an admin-equivalent role for learning; check `aws sts get-caller-identity`. |
+| `Error: acquiring lock: ... DynamoDB` | Another `apply`/`plan` holds the state lock | Wait, or remove a stale lock: `terraform force-unlock <LOCK_ID>` (only if you are sure nothing else is running). |
+| `docker: Cannot connect to the Docker daemon` | Docker Desktop not running | Start Docker Desktop, then `docker version`. |
+| `terraform validate` reports module errors | A referenced module path is wrong or not initialized | Run `terraform init` in that example directory first. |
+| `Error: InvalidProviderConfigKey` / provider version mismatch | Terraform or AWS Provider too old | Use Terraform >= 1.6 and AWS Provider 5.x (see [Section 4](#4-install-the-required-tools)). |
+| ACM certificate stuck at `PENDING_VALIDATION` | DNS validation CNAME not added | Add the CNAME record in Route53/your DNS provider, then re-check status. |
+| ALB `/health` returns 502/503 | ECS task not running or health check failing | `aws ecs describe-services`; confirm tasks are `RUNNING` and the app listens on `8080` at `/health`. |
+| `terraform destroy` fails on S3 bucket not empty | Bucket has objects | `aws s3 rm s3://BUCKET --recursive` then destroy again (see [Section 26 cleanup](#26-destroy-the-environment)). |
+| Charges continue after destroy | Orphaned resources (NAT, EIP, RDS, KMS) | Check billing dashboard and the manual cleanup commands in [Section 26](#26-destroy-the-environment). |
+| `Error: modifying KMS Key Policy: ... AccessDenied` | Key is managed by another account/service | Leave the default AWS-owned key, or grant your role `kms:*` on the key. |
+| `git clone` fails with TLS error | Old git using schannel | `git -c http.sslBackend=openssl clone ...` or update Git for Windows. |
+
+If a command fails and you are not sure why, read the full error (not just the
+last line) — Terraform usually names the exact resource and the reason.
+
+---
+
+## 30. Self-test questions
+
+Answer these to check your understanding. If you can answer most, you understand
+the architecture, not just the steps.
+
+1. In your own words, what does "Zero Trust" mean, and how is it different from a
+   traditional firewall-only network?
+2. Why are the ECS tasks given **no public IP address**, even though they serve a
+   public website?
+3. Why is the RDS database placed in an **isolated** subnet instead of a private
+   one?
+4. Which security group is allowed to talk to the database on port `5432`, and
+   why not the ALB's security group directly?
+5. What does `terraform.tfstate` contain, and why must you never commit it to
+   Git?
+6. What is the difference between `terraform plan` and `terraform apply`? Why
+   run plan first?
+7. Why does the project use separate KMS keys for logs, RDS, and S3 instead of
+   one shared key?
+8. What does CloudTrail record, and why does that matter for security?
+9. Name two reasons the lab configuration is cheaper than production.
+10. After `terraform destroy`, which resources might still exist and need manual
+    cleanup?
+
+---
+
+## 31. Where to learn the basics first
+
+If you realize you need the fundamentals before tackling this project, these
+free resources are good starting points:
+
+- **AWS basics** — AWS Cloud Practitioner essentials (AWS Skill Builder, free).
+- **Terraform basics** — HashiCorp's "Get started with Terraform" tutorials at
+  `https://developer.hashicorp.com/terraform/tutorials`.
+- **Docker basics** — Docker's "Get started" guide at `https://docs.docker.com/get-started/`.
+- **Networking basics** — any short "IP addresses, subnets, and CIDR" explainer;
+  you only need the intuition, not the math.
+- **AWS security basics** — the AWS Well-Architected Security pillar whitepaper.
+
+You do not need all of these before starting. Read the first one or two, then
+come back to this guide and learn the rest as you go.
