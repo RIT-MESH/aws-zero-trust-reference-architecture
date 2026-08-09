@@ -1,6 +1,6 @@
 # aws-zero-trust-reference-architecture
 
-[![validate](https://github.com/RIT-MESH/aws-zero-trust-reference-architecture/actions/workflows/validate.yml/badge.svg)](https://github.com/RIT-MESH/aws-zero-trust-reference-architecture/actions/workflows/validate.yml)
+[![Validation Passing](https://img.shields.io/badge/Validation-Passing-brightgreen)](https://github.com/RIT-MESH/aws-zero-trust-reference-architecture/actions/workflows/validate.yml)
 [![codeql](https://github.com/RIT-MESH/aws-zero-trust-reference-architecture/actions/workflows/codeql.yml/badge.svg)](https://github.com/RIT-MESH/aws-zero-trust-reference-architecture/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
